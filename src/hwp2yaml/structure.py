@@ -169,6 +169,8 @@ class StructureParser:
             # Fix #1: 테이블 종료 감지 - 레벨이 테이블 시작 레벨 미만으로 떨어지면 종료
             if self.in_table and self.table_start_level is not None:
                 if level < self.table_start_level:
+                    # 마지막 셀의 대기 중인 텍스트를 먼저 flush
+                    self._finalize_paragraph(section, level)
                     self._finalize_current_table(section)
 
             if tag_id == HWPTAG_PARA_HEADER:

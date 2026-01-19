@@ -116,10 +116,20 @@ class TestTableEndDetection:
         assert section.tables[0].rows == 1
         assert section.tables[0].cols == 2
 
+        # 셀 내용 검증 (마지막 셀 텍스트가 누출되지 않음)
+        assert len(section.tables[0].cells) == 2
+        cell_texts = [c.text for c in section.tables[0].cells]
+        assert "Cell1" in cell_texts
+        assert "Cell2" in cell_texts
+
         # 테이블 후 단락이 별도로 존재 (테이블 셀에 포함되지 않음)
         after_table_texts = [p.text for p in section.paragraphs if "After" in p.text]
         assert len(after_table_texts) == 1
         assert after_table_texts[0] == "After table"
+
+        # Cell2가 일반 단락으로 누출되지 않았는지 확인
+        para_texts = [p.text for p in section.paragraphs]
+        assert not any("Cell2" in t for t in para_texts)
 
 
 class TestMultiRecordParagraph:
