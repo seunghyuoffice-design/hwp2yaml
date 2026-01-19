@@ -209,3 +209,273 @@ def clean_text(text: str) -> str:
     text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text)
 
     return text.strip()
+
+
+# ============================================================================
+# HWPX 구조 보존 추출 (XML 기반)
+# ============================================================================
+
+# HWPX XML 네임스페이스
+HWPX_NAMESPACES = {
+    "hp": "http://www.hancom.co.kr/hwpml/2011/paragraph",
+    "hc": "http://www.hancom.co.kr/hwpml/2011/core",
+    "hs": "http://www.hancom.co.kr/hwpml/2011/section",
+}
+
+
+def extract_hwpx_structure(filepath: str) -> dict | None:
+    """
+    HWPX 파일에서 구조 보존 추출
+
+    문서 구조(단락, 테이블, 섹션)를 유지하여 딕셔너리로 반환
+
+    Args:
+        filepath: HWPX 파일 경로
+
+    Returns:
+        구조화된 딕셔너리 또는 None
+        {
+            "sections": [
+                {
+                    "index": 0,
+                    "paragraphs": [{"text": "...", "level": 0}, ...],
+                    "tables": [{"rows": 3, "cols": 2, "data": [[...], ...]}, ...]
+                }
+            ]
+        }
+    """
+    if not is_hwpx(filepath):
+        return None
+
+    try:
+        with zipfile.ZipFile(filepath, "r") as zf:
+            namelist = zf.namelist()
+
+            # section*.xml 파일 찾기
+            section_files = sorted([
+                n for n in namelist
+                if "section" in n.lower() and n.endswith(".xml")
+            ])
+
+            if not section_files:
+                return None
+
+            sections = []
+            for idx, section_file in enumerate(section_files):
+                try:
+                    with zf.open(section_file) as f:
+                        xml_content = f.read().decode("utf-8")
+                        section_data = _parse_hwpx_section_structure(xml_content, idx)
+                        if section_data:
+                            sections.append(section_data)
+                except Exception:
+                    continue
+
+            if not sections:
+                return None
+
+            return {"sections": sections}
+
+    except (zipfile.BadZipFile, KeyError, Exception):
+        return None
+
+
+def _parse_hwpx_section_structure(xml_content: str, section_idx: int) -> dict | None:
+    """
+    HWPX 섹션 XML에서 구조 추출
+
+    Args:
+        xml_content: section*.xml 내용
+        section_idx: 섹션 인덱스
+
+    Returns:
+        섹션 구조 딕셔너리
+    """
+    try:
+        # 네임스페이스 제거 (단순화를 위해)
+        # xmlns 속성 제거 후 태그 접두사도 제거
+        xml_clean = re.sub(r'\sxmlns[^"]*"[^"]*"', "", xml_content)
+        xml_clean = re.sub(r'<(/?)(\w+):', r'<\1', xml_clean)
+
+        root = ET.fromstring(xml_clean)
+
+        paragraphs = []
+        tables = []
+
+        # 재귀적으로 요소 탐색
+        _extract_structure_recursive(root, paragraphs, tables)
+
+        return {
+            "index": section_idx,
+            "paragraphs": paragraphs,
+            "tables": tables,
+        }
+
+    except ET.ParseError:
+        return None
+
+
+def _extract_structure_recursive(
+    element: ET.Element,
+    paragraphs: list,
+    tables: list,
+    current_level: int = 0
+) -> None:
+    """
+    XML 요소를 재귀적으로 탐색하여 단락과 테이블 추출
+
+    HWPX 태그 구조:
+    - <p> or <para>: 단락
+    - <t>: 텍스트
+    - <tbl>: 테이블
+    - <tr>: 테이블 행
+    - <tc>: 테이블 셀
+    - <run>: 텍스트 런
+    """
+    tag = element.tag.lower()
+
+    # 테이블 처리
+    if tag in ("tbl", "table"):
+        table_data = _parse_hwpx_table(element)
+        if table_data:
+            tables.append(table_data)
+        return  # 테이블 내부는 별도 처리
+
+    # 단락 처리
+    if tag in ("p", "para", "paragraph"):
+        para_text = _extract_paragraph_text(element)
+        if para_text.strip():
+            paragraphs.append({
+                "text": para_text.strip(),
+                "level": current_level,
+            })
+        return  # 단락 내부 더 탐색 불필요
+
+    # 섹션/컨테이너는 재귀 탐색
+    for child in element:
+        _extract_structure_recursive(child, paragraphs, tables, current_level)
+
+
+def _extract_paragraph_text(element: ET.Element) -> str:
+    """
+    단락 요소에서 모든 텍스트 추출
+
+    <p>
+      <run><t>텍스트1</t></run>
+      <run><t>텍스트2</t></run>
+    </p>
+    """
+    texts = []
+
+    # 요소 자체의 텍스트
+    if element.text and element.text.strip():
+        texts.append(element.text.strip())
+
+    # 모든 하위 요소 순회
+    for elem in element.iter():
+        tag = elem.tag.lower()
+
+        # <t> 태그는 텍스트 컨테이너
+        if tag == "t":
+            if elem.text:
+                texts.append(elem.text)
+
+        # tail 텍스트 (닫는 태그 뒤 텍스트)
+        if elem.tail and elem.tail.strip():
+            texts.append(elem.tail.strip())
+
+    return "".join(texts)
+
+
+def _parse_hwpx_table(table_element: ET.Element) -> dict | None:
+    """
+    테이블 요소에서 구조 추출
+
+    <tbl>
+      <tr><tc><p>...</p></tc><tc><p>...</p></tc></tr>
+      <tr><tc><p>...</p></tc><tc><p>...</p></tc></tr>
+    </tbl>
+    """
+    rows_data = []
+
+    # 행 찾기 (<tr>)
+    for child in table_element:
+        tag = child.tag.lower()
+        if tag == "tr":
+            row_cells = _parse_hwpx_table_row(child)
+            if row_cells:
+                rows_data.append(row_cells)
+
+    if not rows_data:
+        return None
+
+    # 열 수 정규화 (가장 긴 행 기준)
+    max_cols = max(len(row) for row in rows_data)
+    for row in rows_data:
+        while len(row) < max_cols:
+            row.append("")
+
+    return {
+        "rows": len(rows_data),
+        "cols": max_cols,
+        "data": rows_data,
+    }
+
+
+def _parse_hwpx_table_row(tr_element: ET.Element) -> list[str]:
+    """
+    테이블 행에서 셀 텍스트 추출
+
+    <tr>
+      <tc><p><run><t>셀1</t></run></p></tc>
+      <tc><p><run><t>셀2</t></run></p></tc>
+    </tr>
+    """
+    cells = []
+
+    for child in tr_element:
+        tag = child.tag.lower()
+        if tag == "tc":
+            cell_text = _extract_cell_text(child)
+            cells.append(cell_text.strip())
+
+    return cells
+
+
+def _extract_cell_text(tc_element: ET.Element) -> str:
+    """
+    테이블 셀에서 텍스트 추출
+
+    셀 안에는 여러 단락이 있을 수 있음
+    """
+    texts = []
+
+    for elem in tc_element.iter():
+        tag = elem.tag.lower()
+
+        if tag == "t":
+            if elem.text:
+                texts.append(elem.text)
+
+    return " ".join(texts)
+
+
+def hwpx_structure_to_flat_text(structure: dict) -> str:
+    """
+    HWPX 구조를 평탄화된 텍스트로 변환 (하위 호환)
+
+    Args:
+        structure: extract_hwpx_structure() 결과
+
+    Returns:
+        평탄화된 텍스트
+    """
+    texts = []
+
+    for section in structure.get("sections", []):
+        for para in section.get("paragraphs", []):
+            text = para.get("text", "").strip()
+            if text:
+                texts.append(text)
+
+    return "\n".join(texts)

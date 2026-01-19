@@ -127,3 +127,45 @@ class TrainingData:
             "content": self.content,
             "metadata": self.metadata,
         }
+
+
+@dataclass
+class StructuredResult:
+    """구조 보존 추출 결과 (HWP 5.x / HWPX)"""
+    filepath: str
+    success: bool
+    method: Literal["hwp5_structure", "hwpx_structure", "failed"]  # HWPX 구조 추출 지원
+    structure: dict | None = None  # DocumentStructure.to_dict()
+    text: str | None = None        # 평탄화된 텍스트 (하위 호환)
+    tables: list[dict] = field(default_factory=list)
+    error: str | None = None
+    metadata: HWPMetadata | None = None
+    extracted_at: datetime = field(default_factory=datetime.now)
+
+    def to_yaml_dict(self) -> dict:
+        """YAML 출력용 딕셔너리"""
+        import yaml
+        from pathlib import Path
+
+        return {
+            "metadata": {
+                "source_file": self.filepath,
+                "filename": Path(self.filepath).name,
+                "method": self.method,
+                "extracted_at": self.extracted_at.isoformat(),
+            },
+            "structure": self.structure,
+            "tables": self.tables,
+            "raw_text": self.text,
+        }
+
+    def to_yaml(self) -> str:
+        """YAML 문자열 변환"""
+        import yaml
+        return yaml.dump(
+            self.to_yaml_dict(),
+            allow_unicode=True,
+            default_flow_style=False,
+            sort_keys=False,
+            width=120,
+        )

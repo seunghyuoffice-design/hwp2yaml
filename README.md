@@ -17,7 +17,7 @@ HWP 5.x / HWPX / HWP 3.x 문서를 YAML로 직접 변환하는 Python 라이브�
 - **MIT 라이선스**: 상업적 사용 가능
 - **전 버전 지원**: HWP 3.x ~ HWPX 모두 처리
 - **트리아지**: 파일 버전 자동 감지 및 분류
-- **구조 보존**: 테이블, 섹션 구조 보존
+- **구조 보존**: 단락, 테이블, 섹션 구조 완전 보존 (HWP 5.x)
 
 ## 설치
 
@@ -82,6 +82,64 @@ result = extract_hwp_text("document.hwp")
 if result.success:
     print(result.text)
     print(f"방법: {result.method}")  # "prvtext", "bodytext", "hwpx"
+```
+
+### HWP 5.x 구조 보존 추출 (NEW)
+
+단락, 테이블, 섹션 구조를 보존하여 YAML로 변환:
+
+```python
+from hwp2yaml import extract_hwp_structure
+
+result = extract_hwp_structure("document.hwp")
+
+if result.success:
+    print(f"방법: {result.method}")  # "hwp5_structure"
+
+    # 구조 정보
+    for section in result.structure["sections"]:
+        print(f"단락 수: {len(section['paragraphs'])}")
+        print(f"테이블 수: {len(section['tables'])}")
+
+    # 테이블 추출
+    for table in result.tables:
+        print(f"테이블: {table['rows']}x{table['cols']}")
+        print(table['data'])  # 2D 배열
+
+    # YAML 출력
+    print(result.to_yaml())
+```
+
+### 구조 보존 YAML 스키마
+
+```yaml
+metadata:
+  source_file: /path/to/document.hwp
+  method: hwp5_structure
+  extracted_at: "2026-01-19T..."
+
+structure:
+  sections:
+    - index: 0
+      paragraphs:
+        - text: "첫 번째 단락"
+          level: 0
+        - text: "두 번째 단락"
+          level: 0
+      tables:
+        - rows: 3
+          cols: 2
+          data:
+            - ["헤더1", "헤더2"]
+            - ["셀1", "셀2"]
+            - ["셀3", "셀4"]
+
+tables:  # 전체 테이블 목록 (편의용)
+  - rows: 3
+    cols: 2
+    data: [...]
+
+raw_text: 평탄화된 텍스트
 ```
 
 ### HWP 3.x → YAML 변환

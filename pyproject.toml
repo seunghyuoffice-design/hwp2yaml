@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hwp2yaml"
-version = "0.5.0"
-description = "HWP 5.x / HWPX / HWP 3.x to YAML converter"
+version = "0.6.0"
+description = "HWP 5.x / HWPX / HWP 3.x to YAML converter with structure preservation"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"

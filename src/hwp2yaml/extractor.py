@@ -6,10 +6,12 @@ from typing import Literal
 from .constants import STREAM_PRV_TEXT, DEFAULT_ENCODING
 from .reader import HWPReader, HWPReaderError
 from .record import RecordParser
-from .models import ExtractResult
+from .models import ExtractResult, StructuredResult
 from .utils import (
     is_hwpx,
     extract_hwpx_text,
+    extract_hwpx_structure,
+    hwpx_structure_to_flat_text,
     convert_table_tags_to_markdown,
     clean_text,
 )
@@ -203,4 +205,96 @@ def extract_hwp_text(
             text=None,
             method="failed",
             error=f"예상치 못한 오류: {e}",
+        )
+
+
+def extract_hwp_structure(filepath: str) -> StructuredResult:
+    """
+    HWP/HWPX 파일에서 구조 보존 추출
+
+    단락, 테이블, 섹션 구조를 유지하여 추출
+
+    Args:
+        filepath: HWP/HWPX 파일 경로
+
+    Returns:
+        StructuredResult 객체
+    """
+    # HWPX (XML 기반) 처리
+    if is_hwpx(filepath):
+        structure = extract_hwpx_structure(filepath)
+
+        if structure:
+            # 테이블 추출
+            tables = []
+            for section in structure.get("sections", []):
+                tables.extend(section.get("tables", []))
+
+            # 평탄화된 텍스트 (하위 호환)
+            flat_text = hwpx_structure_to_flat_text(structure)
+
+            return StructuredResult(
+                filepath=filepath,
+                success=True,
+                method="hwpx_structure",
+                structure=structure,
+                text=flat_text,
+                tables=tables,
+            )
+        else:
+            return StructuredResult(
+                filepath=filepath,
+                success=False,
+                method="failed",
+                error="HWPX 구조 파싱 실패",
+            )
+
+    # HWP 5.x (OLE2 기반) 처리
+    from .structure import extract_hwp5_structure
+
+    try:
+        with HWPReader(filepath) as reader:
+            sections = list(reader.iter_sections())
+
+            if not sections:
+                return StructuredResult(
+                    filepath=filepath,
+                    success=False,
+                    method="failed",
+                    error="BodyText 섹션 없음",
+                    metadata=reader.metadata,
+                )
+
+            # 구조 파싱
+            doc_structure = extract_hwp5_structure(sections)
+
+            # 테이블 추출
+            tables = [t.to_dict() for t in doc_structure.get_all_tables()]
+
+            # 평탄화된 텍스트 (하위 호환)
+            flat_text = doc_structure.to_flat_text()
+
+            return StructuredResult(
+                filepath=filepath,
+                success=True,
+                method="hwp5_structure",
+                structure=doc_structure.to_dict(),
+                text=flat_text,
+                tables=tables,
+                metadata=reader.metadata,
+            )
+
+    except HWPReaderError as e:
+        return StructuredResult(
+            filepath=filepath,
+            success=False,
+            method="failed",
+            error=str(e),
+        )
+    except Exception as e:
+        return StructuredResult(
+            filepath=filepath,
+            success=False,
+            method="failed",
+            error=f"구조 추출 오류: {e}",
         )
