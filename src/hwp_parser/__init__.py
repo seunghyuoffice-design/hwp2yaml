@@ -14,19 +14,39 @@ from .utils import (
     convert_table_tags_to_markdown,
     clean_text,
 )
+from .triage import (
+    HWPVersion,
+    TriageResult,
+    TriageSummary,
+    detect_hwp_version,
+    triage_file,
+    triage_files,
+    triage_directory,
+)
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __all__ = [
+    # Core
     "HWPReader",
     "TextExtractor",
     "extract_hwp_text",
     "BatchProcessor",
     "YAMLExporter",
+    # Models
     "ExtractResult",
     "BatchResult",
     "RecordHeader",
+    # Utils
     "is_hwpx",
     "extract_hwpx_text",
     "convert_table_tags_to_markdown",
     "clean_text",
+    # Triage
+    "HWPVersion",
+    "TriageResult",
+    "TriageSummary",
+    "detect_hwp_version",
+    "triage_file",
+    "triage_files",
+    "triage_directory",
 ]
