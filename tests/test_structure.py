@@ -169,15 +169,15 @@ class TestCellAdvancement:
         """셀 범위 초과 시 조용히 처리 (크래시 방지)"""
         # 작은 테이블에 많은 셀 데이터
         section_data = b""
-        section_data += make_ctrl_header(1)
-        section_data += make_table(1, 1, 1)  # 1x1 테이블
-        section_data += make_list_header(1)
-        section_data += make_para_header(1)
-        section_data += make_para_text(1, "Cell00")
+        section_data += make_ctrl_header(1)  # 테이블 시작 레벨 1
+        section_data += make_table(2, 1, 1)  # 1x1 테이블 (레벨 2)
+        section_data += make_list_header(2)
+        section_data += make_para_header(2)
+        section_data += make_para_text(2, "Cell00")
         # 두 번째 셀 (범위 초과)
-        section_data += make_list_header(1)
-        section_data += make_para_header(1)
-        section_data += make_para_text(1, "Overflow")
+        section_data += make_list_header(2)
+        section_data += make_para_header(2)
+        section_data += make_para_text(2, "Overflow")
 
         parser = StructureParser()
         section = parser.parse_section(0, section_data)

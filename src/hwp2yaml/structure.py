@@ -213,6 +213,10 @@ class StructureParser:
                 self.current_cell_col = 0
 
             elif tag_id == HWPTAG_LIST_HEADER:
+                # Fix #3: LIST_HEADER 전에 대기 중인 단락 finalize
+                if self.in_table:
+                    self._finalize_paragraph(section, level)
+
                 # Fix #3: 테이블 내부이고 셀 진입 전에만 셀 이동
                 if self.in_table and self.current_table and not self.in_cell:
                     # 이전 셀 텍스트가 있으면 저장
