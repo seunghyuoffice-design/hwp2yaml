@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hwp2yaml"
-version = "0.6.0"
+version = "0.6.1"
 description = "HWP 5.x / HWPX / HWP 3.x to YAML converter with structure preservation"
 readme = "README.md"
 license = "MIT"
@@ -24,9 +24,9 @@ classifiers = [
     "Topic :: Text Processing :: General",
 ]
 dependencies = [
-    "olefile>=0.46",
-    "pyyaml>=6.0",
-    "tqdm>=4.60",
+    "olefile>=0.47",
+    "pyyaml>=6.0.2",
+    "tqdm>=4.67",
 ]
 
 [project.optional-dependencies]
