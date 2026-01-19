@@ -98,16 +98,35 @@ def extract_hwpx_text(filepath: str) -> str | None:
     """
     try:
         with zipfile.ZipFile(filepath, "r") as zf:
-            texts = []
+            namelist = zf.namelist()
 
-            # Contents/section*.xml 파일에서 텍스트 추출
-            for name in sorted(zf.namelist()):
-                if name.startswith("Contents/section") and name.endswith(".xml"):
+            # 1. Preview/PrvText.txt 시도 (가장 쉬운 방법)
+            prvtext_paths = [n for n in namelist if "prvtext" in n.lower()]
+            for prvtext_path in prvtext_paths:
+                try:
+                    with zf.open(prvtext_path) as f:
+                        text = f.read().decode("utf-8", errors="replace").strip()
+                        if text:
+                            return text
+                except Exception:
+                    continue
+
+            # 2. Contents/section*.xml 파일에서 텍스트 추출
+            texts = []
+            section_files = sorted([
+                n for n in namelist
+                if "section" in n.lower() and n.endswith(".xml")
+            ])
+
+            for name in section_files:
+                try:
                     with zf.open(name) as f:
                         content = f.read().decode("utf-8")
                         section_text = _parse_hwpx_section(content)
                         if section_text:
                             texts.append(section_text)
+                except Exception:
+                    continue
 
             return "\n\n".join(texts) if texts else None
 
