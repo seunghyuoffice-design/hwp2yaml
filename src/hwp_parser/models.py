@@ -64,7 +64,7 @@ class ExtractResult:
     filepath: str
     success: bool
     text: str | None
-    method: Literal["prvtext", "bodytext", "failed"]
+    method: Literal["prvtext", "bodytext", "hwpx", "failed"]
     error: str | None = None
     metadata: HWPMetadata | None = None
     char_count: int = 0

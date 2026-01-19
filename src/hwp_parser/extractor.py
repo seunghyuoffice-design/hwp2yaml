@@ -7,6 +7,12 @@ from .constants import STREAM_PRV_TEXT, DEFAULT_ENCODING
 from .reader import HWPReader, HWPReaderError
 from .record import RecordParser
 from .models import ExtractResult
+from .utils import (
+    is_hwpx,
+    extract_hwpx_text,
+    convert_table_tags_to_markdown,
+    clean_text,
+)
 
 
 class TextExtractor:
@@ -124,20 +130,64 @@ class TextExtractor:
         return text
 
 
-def extract_hwp_text(filepath: str) -> ExtractResult:
+def extract_hwp_text(
+    filepath: str,
+    convert_tables: bool = True,
+    clean: bool = True,
+) -> ExtractResult:
     """
-    HWP 파일에서 텍스트 추출 (편의 함수)
+    HWP/HWPX 파일에서 텍스트 추출 (편의 함수)
 
     Args:
-        filepath: HWP 파일 경로
+        filepath: HWP/HWPX 파일 경로
+        convert_tables: 표 태그를 마크다운으로 변환
+        clean: 텍스트 정리 (공백, 제어문자)
 
     Returns:
         ExtractResult 객체
     """
+    # 1. HWPX (XML 기반) 먼저 확인
+    if is_hwpx(filepath):
+        text = extract_hwpx_text(filepath)
+        if text:
+            if convert_tables:
+                text = convert_table_tags_to_markdown(text)
+            if clean:
+                text = clean_text(text)
+
+            return ExtractResult(
+                filepath=filepath,
+                success=True,
+                text=text,
+                method="hwpx",
+            )
+        else:
+            return ExtractResult(
+                filepath=filepath,
+                success=False,
+                text=None,
+                method="failed",
+                error="HWPX 파싱 실패",
+            )
+
+    # 2. HWP (OLE2 기반)
     try:
         with HWPReader(filepath) as reader:
             extractor = TextExtractor(reader)
-            return extractor.extract()
+            result = extractor.extract()
+
+            # 후처리
+            if result.success and result.text:
+                text = result.text
+                if convert_tables:
+                    text = convert_table_tags_to_markdown(text)
+                if clean:
+                    text = clean_text(text)
+                result.text = text
+                result.char_count = len(text)
+
+            return result
+
     except HWPReaderError as e:
         return ExtractResult(
             filepath=filepath,
