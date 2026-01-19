@@ -1,8 +1,8 @@
 """HWP 추출기 테스트"""
 
 import pytest
-from hwp_parser.extractor import extract_hwp_text
-from hwp_parser.models import ExtractResult
+from hwp2yaml.extractor import extract_hwp_text
+from hwp2yaml.models import ExtractResult
 
 
 def test_extract_nonexistent_file():

@@ -1,5 +1,5 @@
 """
-HWP 5.x/HWPX 파서 - olefile 기반 직접 구현
+hwp2yaml - HWP 5.x / HWPX / HWP 3.x → YAML 변환기
 라이선스: MIT (pyhwp 대체)
 """
 

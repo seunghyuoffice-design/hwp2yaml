@@ -1,6 +1,6 @@
-# hwp-parser
+# hwp2yaml
 
-HWP 5.x / HWPX / HWP 3.x 문서를 YAML로 변환하는 Python 라이브러리.
+HWP 5.x / HWPX / HWP 3.x 문서를 YAML로 직접 변환하는 Python 라이브러리.
 
 ## 지원 형식
 
@@ -22,14 +22,14 @@ HWP 5.x / HWPX / HWP 3.x 문서를 YAML로 변환하는 Python 라이브러리.
 ## 설치
 
 ```bash
-pip install hwp-parser
+pip install hwp2yaml
 ```
 
 또는 소스에서:
 
 ```bash
-git clone https://github.com/seunghyuoffice-design/hwp-parser.git
-cd hwp-parser
+git clone https://github.com/seunghyuoffice-design/hwp2yaml.git
+cd hwp2yaml
 pip install -e .
 ```
 
@@ -53,7 +53,7 @@ sudo apt install poppler-utils
 ### 트리아지 (버전 확인)
 
 ```python
-from hwp_parser import detect_hwp_version, HWPVersion, triage_directory
+from hwp2yaml import detect_hwp_version, HWPVersion, triage_directory
 
 # 단일 파일 버전 확인
 version = detect_hwp_version("document.hwp")
@@ -75,7 +75,7 @@ print(f"HWP 3.x: {summary.hwp3_count}")
 ### HWP 5.x / HWPX 텍스트 추출
 
 ```python
-from hwp_parser import extract_hwp_text
+from hwp2yaml import extract_hwp_text
 
 result = extract_hwp_text("document.hwp")
 
@@ -87,7 +87,7 @@ if result.success:
 ### HWP 3.x → YAML 변환
 
 ```python
-from hwp_parser import convert_hwp3, convert_to_yaml, batch_convert_to_yaml
+from hwp2yaml import convert_hwp3, convert_to_yaml, batch_convert_to_yaml
 
 # 단일 파일 변환
 result = convert_hwp3("old_document.hwp")
@@ -110,7 +110,7 @@ yaml_dict = convert_to_yaml("old_document.hwp", output_path="output.yaml")
 ### 배치 YAML 변환
 
 ```python
-from hwp_parser import batch_convert_to_yaml
+from hwp2yaml import batch_convert_to_yaml
 
 # 배치 변환 (개별 YAML 파일 + 통합 파일)
 yaml_dicts = batch_convert_to_yaml(
@@ -152,7 +152,7 @@ raw_text: 원본 전문
 ### 배치 처리 (HWP 5.x/HWPX)
 
 ```python
-from hwp_parser import BatchProcessor
+from hwp2yaml import BatchProcessor
 
 processor = BatchProcessor(workers=4)
 result = processor.process_directory("/path/to/files")

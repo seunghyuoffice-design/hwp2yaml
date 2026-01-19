@@ -122,8 +122,8 @@ def cmd_info(args):
 def main():
     """CLI 진입점"""
     parser = argparse.ArgumentParser(
-        prog="hwp-parser",
-        description="HWP 5.x 텍스트 추출기 (olefile 기반)",
+        prog="hwp2yaml",
+        description="HWP 5.x / HWPX / HWP 3.x → YAML 변환기",
     )
     subparsers = parser.add_subparsers(dest="command", help="명령")
 
