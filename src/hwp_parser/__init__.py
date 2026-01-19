@@ -28,9 +28,11 @@ from .hwp3_converter import (
     ConversionResult,
     convert_hwp3,
     batch_convert_hwp3,
+    convert_to_yaml,
+    batch_convert_to_yaml,
 )
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 __all__ = [
     # Core
     "HWPReader",
@@ -60,4 +62,6 @@ __all__ = [
     "ConversionResult",
     "convert_hwp3",
     "batch_convert_hwp3",
+    "convert_to_yaml",
+    "batch_convert_to_yaml",
 ]

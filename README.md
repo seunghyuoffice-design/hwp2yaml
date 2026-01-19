@@ -1,6 +1,6 @@
 # hwp-parser
 
-HWP 5.x / HWPX / HWP 3.x 문서에서 텍스트를 추출하는 Python 라이브러리.
+HWP 5.x / HWPX / HWP 3.x 문서를 YAML로 변환하는 Python 라이브러리.
 
 ## 지원 형식
 
@@ -12,12 +12,12 @@ HWP 5.x / HWPX / HWP 3.x 문서에서 텍스트를 추출하는 Python 라이브
 
 ## 특징
 
+- **HWP → YAML**: 중간 변환 없이 직접 YAML 출력
 - **순수 Python**: pyhwp 등 AGPL 라이브러리 대체
 - **MIT 라이선스**: 상업적 사용 가능
 - **전 버전 지원**: HWP 3.x ~ HWPX 모두 처리
 - **트리아지**: 파일 버전 자동 감지 및 분류
-- **표 변환**: 표 태그를 마크다운으로 변환
-- **배치 처리**: 멀티프로세싱 병렬 처리
+- **구조 보존**: 테이블, 섹션 구조 보존
 
 ## 설치
 
@@ -84,29 +84,69 @@ if result.success:
     print(f"방법: {result.method}")  # "prvtext", "bodytext", "hwpx"
 ```
 
-### HWP 3.x 변환 (LibreOffice + Docling)
+### HWP 3.x → YAML 변환
 
 ```python
-from hwp_parser import convert_hwp3, batch_convert_hwp3
+from hwp_parser import convert_hwp3, convert_to_yaml, batch_convert_to_yaml
 
 # 단일 파일 변환
 result = convert_hwp3("old_document.hwp")
 
 if result.success:
-    print(result.text)          # 추출된 텍스트
-    print(result.markdown)      # 마크다운 (Docling 사용 시)
+    print(result.text)           # 추출된 텍스트
     print(f"테이블: {len(result.tables)}")  # 추출된 테이블
     print(f"방법: {result.method}")  # "hwp3_docling" 또는 "hwp3_pdftotext"
 
-# 배치 변환
-results = batch_convert_hwp3(
-    filepaths=["file1.hwp", "file2.hwp"],
-    keep_pdf=True,  # PDF 유지
-    pdf_output_dir="/path/to/pdfs",
-)
+# YAML 딕셔너리로 변환
+yaml_dict = result.to_yaml_dict()
 
-for r in results:
-    print(f"{r.filepath}: {'성공' if r.success else r.error}")
+# YAML 문자열로 변환
+yaml_str = result.to_yaml()
+
+# 직접 YAML 파일로 저장
+yaml_dict = convert_to_yaml("old_document.hwp", output_path="output.yaml")
+```
+
+### 배치 YAML 변환
+
+```python
+from hwp_parser import batch_convert_to_yaml
+
+# 배치 변환 (개별 YAML 파일 + 통합 파일)
+yaml_dicts = batch_convert_to_yaml(
+    filepaths=["file1.hwp", "file2.hwp"],
+    output_dir="/path/to/yaml",           # 개별 파일 저장
+    combined_output="/path/to/all.yaml",  # 통합 파일 저장
+)
+```
+
+### YAML 출력 스키마
+
+```yaml
+metadata:
+  case_id: "2002-4"
+  source: fss_disputes
+  source_file: /path/to/file.hwp
+  version: hwp3
+  method: hwp3_docling
+  converted_at: "2026-01-19T..."
+
+content:
+  parties: 당사자 정보
+  request: 신청취지
+  facts: 사실관계
+  applicant_claim: 신청인 주장
+  respondent_claim: 피신청인 주장
+  decision: 위원회 판단
+
+tables:
+  - table_id: table_0
+    rows: 3
+    cols: 2
+    cells:
+      - {row: 0, col: 0, text: "..."}
+
+raw_text: 원본 전문
 ```
 
 ### 배치 처리 (HWP 5.x/HWPX)

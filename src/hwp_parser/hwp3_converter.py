@@ -4,18 +4,47 @@ HWP 3.x는 1990년대 구형 바이너리 포맷으로 직접 파싱이 어려�
 LibreOffice로 PDF 변환 후 Docling으로 구조 추출.
 
 흐름:
-    HWP 3.x → LibreOffice → PDF → Docling → 구조화된 출력
+    HWP 3.x → LibreOffice → PDF → Docling → 구조화된 출력 → YAML
 """
 
 import os
+import re
 import tempfile
 import subprocess
 import shutil
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 from .triage import detect_hwp_version, HWPVersion
+
+
+def _parse_dispute_structure(text: str, filepath: str) -> Dict[str, Any]:
+    """분쟁조정 문서 구조 파싱"""
+    case_id = Path(filepath).stem
+
+    sections = {
+        "parties": r"(?:당\s*사\s*자|당사자)(.*?)(?=신청취지|이\s*유|$)",
+        "request": r"(?:신청취지|신청\s*취지)(.*?)(?=이\s*유|사실관계|$)",
+        "facts": r"(?:사실관계|사실\s*관계)(.*?)(?=신청인의\s*주장|신청인\s*주장|$)",
+        "applicant_claim": r"(?:신청인의?\s*주장)(.*?)(?=피신청인의?\s*주장|$)",
+        "respondent_claim": r"(?:피신청인의?\s*주장)(.*?)(?=위원회의?\s*판단|판단|$)",
+        "decision": r"(?:위원회의?\s*판단|판\s*단)(.*?)$",
+    }
+
+    result = {"case_id": case_id}
+
+    for key, pattern in sections.items():
+        match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
+        if match:
+            content = match.group(1).strip()
+            content = re.sub(r"^#+\s*", "", content, flags=re.MULTILINE)
+            content = re.sub(r"\s+", " ", content).strip()
+            if content:
+                result[key] = content
+
+    return result
 
 
 @dataclass
@@ -29,6 +58,55 @@ class ConversionResult:
     method: str = "hwp3_docling"
     error: Optional[str] = None
     pdf_path: Optional[str] = None
+
+    def to_yaml_dict(self) -> Dict[str, Any]:
+        """YAML 출력용 딕셔너리 변환"""
+        if not self.success or not self.text:
+            return {
+                "metadata": {
+                    "case_id": Path(self.filepath).stem,
+                    "source_file": self.filepath,
+                    "success": False,
+                    "error": self.error,
+                },
+                "content": None,
+            }
+
+        parsed = _parse_dispute_structure(self.text, self.filepath)
+
+        return {
+            "metadata": {
+                "case_id": parsed.get("case_id", ""),
+                "source": "fss_disputes",
+                "source_file": self.filepath,
+                "version": "hwp3",
+                "method": self.method,
+                "converted_at": datetime.now().isoformat(),
+            },
+            "content": {
+                "parties": parsed.get("parties"),
+                "request": parsed.get("request"),
+                "facts": parsed.get("facts"),
+                "applicant_claim": parsed.get("applicant_claim"),
+                "respondent_claim": parsed.get("respondent_claim"),
+                "decision": parsed.get("decision"),
+            },
+            "tables": self.tables,
+            "raw_text": self.text,
+        }
+
+    def to_yaml(self) -> str:
+        """YAML 문자열 변환"""
+        try:
+            import yaml
+            return yaml.dump(
+                self.to_yaml_dict(),
+                allow_unicode=True,
+                default_flow_style=False,
+                sort_keys=False,
+            )
+        except ImportError:
+            raise ImportError("PyYAML 설치 필요: pip install pyyaml")
 
 
 class HWP3Converter:
@@ -164,16 +242,26 @@ class HWP3Converter:
         return pdf_path
 
     def _extract_with_docling(self, filepath: str, pdf_path: str) -> ConversionResult:
-        """Docling으로 구조 추출"""
+        """Docling으로 구조 추출 (YAML 직접 변환)"""
         from docling.document_converter import DocumentConverter
 
         converter = DocumentConverter()
         result = converter.convert(pdf_path)
 
-        # 마크다운 추출
-        markdown = result.document.export_to_markdown()
+        # 구조화된 딕셔너리 추출 (마크다운 중간 단계 없음)
+        doc_dict = result.document.export_to_dict()
 
-        # 테이블 추출
+        # 텍스트 추출 (구조 보존)
+        texts = []
+        if "texts" in doc_dict:
+            for item in doc_dict.get("texts", []):
+                if isinstance(item, dict) and "text" in item:
+                    texts.append(item["text"])
+                elif isinstance(item, str):
+                    texts.append(item)
+        text = "\n".join(texts) if texts else ""
+
+        # 테이블 추출 (구조 보존)
         tables = []
         for i, table in enumerate(result.document.tables):
             table_data = {
@@ -182,7 +270,6 @@ class HWP3Converter:
                 "cols": table.num_cols,
                 "cells": [],
             }
-            # 셀 데이터 추출
             try:
                 for row_idx, row in enumerate(table.data):
                     for col_idx, cell in enumerate(row):
@@ -195,9 +282,6 @@ class HWP3Converter:
                 pass
             tables.append(table_data)
 
-        # 텍스트 추출 (마크다운에서)
-        text = markdown
-
         # PDF 정리
         if not self.keep_pdf:
             self._cleanup_pdf(pdf_path)
@@ -207,7 +291,7 @@ class HWP3Converter:
             success=True,
             text=text,
             tables=tables,
-            markdown=markdown,
+            markdown=None,  # 마크다운 중간 단계 제거
             method="hwp3_docling",
             pdf_path=pdf_path if self.keep_pdf else None,
         )
@@ -330,9 +414,118 @@ def batch_convert_hwp3(
     return results
 
 
+def convert_to_yaml(
+    filepath: str,
+    output_path: Optional[str] = None,
+    keep_pdf: bool = False,
+) -> Dict[str, Any]:
+    """
+    HWP 3.x 파일을 YAML로 변환
+
+    Args:
+        filepath: HWP 3.x 파일 경로
+        output_path: YAML 저장 경로 (None이면 저장 안 함)
+        keep_pdf: 변환된 PDF 유지 여부
+
+    Returns:
+        YAML 딕셔너리
+    """
+    result = convert_hwp3(filepath, keep_pdf=keep_pdf)
+    yaml_dict = result.to_yaml_dict()
+
+    if output_path:
+        try:
+            import yaml
+            with open(output_path, "w", encoding="utf-8") as f:
+                yaml.dump(
+                    yaml_dict,
+                    f,
+                    allow_unicode=True,
+                    default_flow_style=False,
+                    sort_keys=False,
+                )
+        except ImportError:
+            raise ImportError("PyYAML 설치 필요: pip install pyyaml")
+
+    return yaml_dict
+
+
+def batch_convert_to_yaml(
+    filepaths: List[str],
+    output_dir: Optional[str] = None,
+    combined_output: Optional[str] = None,
+    keep_pdf: bool = False,
+    progress: bool = True,
+) -> List[Dict[str, Any]]:
+    """
+    HWP 3.x 파일 배치 YAML 변환
+
+    Args:
+        filepaths: HWP 3.x 파일 경로 목록
+        output_dir: 개별 YAML 저장 디렉토리 (None이면 저장 안 함)
+        combined_output: 통합 YAML 파일 경로 (None이면 저장 안 함)
+        keep_pdf: 변환된 PDF 유지 여부
+        progress: 진행률 표시
+
+    Returns:
+        YAML 딕셔너리 목록
+    """
+    results = batch_convert_hwp3(filepaths, keep_pdf=keep_pdf, progress=progress)
+    yaml_dicts = []
+
+    for result in results:
+        yaml_dict = result.to_yaml_dict()
+        yaml_dicts.append(yaml_dict)
+
+        # 개별 파일 저장
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
+            case_id = yaml_dict["metadata"].get("case_id", "unknown")
+            output_path = os.path.join(output_dir, f"{case_id}.yaml")
+            try:
+                import yaml
+                with open(output_path, "w", encoding="utf-8") as f:
+                    yaml.dump(
+                        yaml_dict,
+                        f,
+                        allow_unicode=True,
+                        default_flow_style=False,
+                        sort_keys=False,
+                    )
+            except ImportError:
+                raise ImportError("PyYAML 설치 필요: pip install pyyaml")
+
+    # 통합 파일 저장
+    if combined_output:
+        try:
+            import yaml
+            combined = {
+                "metadata": {
+                    "source": "fss_disputes",
+                    "total_disputes": len(yaml_dicts),
+                    "converted_at": datetime.now().isoformat(),
+                },
+                "disputes": yaml_dicts,
+            }
+            with open(combined_output, "w", encoding="utf-8") as f:
+                yaml.dump(
+                    combined,
+                    f,
+                    allow_unicode=True,
+                    default_flow_style=False,
+                    sort_keys=False,
+                )
+        except ImportError:
+            raise ImportError("PyYAML 설치 필요: pip install pyyaml")
+
+    return yaml_dicts
+
+
 __all__ = [
     "HWP3Converter",
     "ConversionResult",
     "convert_hwp3",
     "batch_convert_hwp3",
+    "convert_to_yaml",
+    "batch_convert_to_yaml",
 ]
