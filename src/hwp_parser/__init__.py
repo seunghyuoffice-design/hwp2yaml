@@ -23,8 +23,14 @@ from .triage import (
     triage_files,
     triage_directory,
 )
+from .hwp3_converter import (
+    HWP3Converter,
+    ConversionResult,
+    convert_hwp3,
+    batch_convert_hwp3,
+)
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 __all__ = [
     # Core
     "HWPReader",
@@ -49,4 +55,9 @@ __all__ = [
     "triage_file",
     "triage_files",
     "triage_directory",
+    # HWP 3.x Converter
+    "HWP3Converter",
+    "ConversionResult",
+    "convert_hwp3",
+    "batch_convert_hwp3",
 ]
