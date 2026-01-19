@@ -135,7 +135,10 @@ class StructureParser:
         self.current_cell_row: int = 0
         self.current_cell_col: int = 0
         self.in_table: bool = False
+        self.in_cell: bool = False  # Fix #3: 셀 내부 상태 추적
         self.cell_texts: list[str] = []
+        self.table_start_level: int | None = None  # Fix #1: 테이블 시작 레벨 추적
+        self.current_para_texts: list[str] = []  # Fix #2: 다중 레코드 단락 누적
 
     def parse_section(self, section_idx: int, section_data: bytes) -> Section:
         """섹션 데이터 파싱
@@ -150,7 +153,10 @@ class StructureParser:
         section = Section(index=section_idx)
         self.current_section = section
         self.in_table = False
+        self.in_cell = False  # Fix #3: 셀 상태 초기화
         self.current_table = None
+        self.table_start_level = None  # Fix #1: 테이블 시작 레벨 초기화
+        self.current_para_texts = []  # Fix #2: 단락 텍스트 버퍼 초기화
 
         records = list(RecordParser.iter_records(section_data))
 
@@ -160,53 +166,41 @@ class StructureParser:
             tag_id = record.header.tag_id
             level = record.header.level
 
+            # Fix #1: 테이블 종료 감지 - 레벨이 테이블 시작 레벨 미만으로 떨어지면 종료
+            if self.in_table and self.table_start_level is not None:
+                if level < self.table_start_level:
+                    self._finalize_current_table(section)
+
             if tag_id == HWPTAG_PARA_HEADER:
+                # Fix #2: 이전 단락 텍스트 마무리
+                self._finalize_paragraph(section, level)
+
                 # 단락 헤더 - 컨트롤 마스크 확인
                 ctrl_mask = self._parse_para_header(record.data)
+                self.current_para_texts = []  # 새 단락 시작
 
-                # 다음 레코드에서 텍스트 찾기
-                text = ""
-                j = i + 1
-                while j < len(records):
-                    next_record = records[j]
-                    if next_record.header.tag_id == HWPTAG_PARA_TEXT:
-                        text = self._decode_para_text(next_record.data)
-                        break
-                    elif next_record.header.tag_id == HWPTAG_PARA_HEADER:
-                        # 다음 단락 시작
-                        break
-                    j += 1
-
-                # 테이블 내부가 아니면 단락 추가
-                if not self.in_table:
-                    if text.strip():
-                        para = Paragraph(text=text, level=level)
-                        section.paragraphs.append(para)
-                else:
-                    # 테이블 셀 내부 텍스트
-                    self.cell_texts.append(text)
+            elif tag_id == HWPTAG_PARA_TEXT:
+                # Fix #2: 다중 레코드 단락 누적
+                text = self._decode_para_text(record.data)
+                if text:
+                    self.current_para_texts.append(text)
 
             elif tag_id == HWPTAG_CTRL_HEADER:
                 # 컨트롤 헤더 - 타입 확인
                 ctrl_type = self._parse_ctrl_header(record.data)
 
                 if ctrl_type == ControlType.TABLE:
+                    # Fix #2: 테이블 전 대기 중인 단락 마무리
+                    self._finalize_paragraph(section, level)
+
                     # 이전 테이블이 있으면 먼저 저장
                     if self.in_table and self.current_table:
-                        # 마지막 셀 저장
-                        if self.cell_texts:
-                            cell_text = "\n".join(self.cell_texts)
-                            cell = TableCell(
-                                row=self.current_cell_row,
-                                col=self.current_cell_col,
-                                text=cell_text.strip(),
-                            )
-                            self.current_table.cells.append(cell)
-                        section.tables.append(self.current_table)
-                        self.current_table = None
+                        self._finalize_current_table(section)
 
                     # 새 테이블 시작
                     self.in_table = True
+                    self.in_cell = False
+                    self.table_start_level = level  # Fix #1: 테이블 시작 레벨 저장
                     self.cell_texts = []
                     self.current_cell_row = 0
                     self.current_cell_col = 0
@@ -219,44 +213,97 @@ class StructureParser:
                 self.current_cell_col = 0
 
             elif tag_id == HWPTAG_LIST_HEADER:
-                # 리스트/셀 헤더
-                if self.in_table and self.current_table:
-                    # 현재 셀 텍스트 저장
+                # Fix #3: 테이블 내부이고 셀 진입 전에만 셀 이동
+                if self.in_table and self.current_table and not self.in_cell:
+                    # 이전 셀 텍스트가 있으면 저장
                     if self.cell_texts:
-                        cell_text = "\n".join(self.cell_texts)
-                        cell = TableCell(
-                            row=self.current_cell_row,
-                            col=self.current_cell_col,
-                            text=cell_text.strip(),
-                        )
-                        self.current_table.cells.append(cell)
-                        self.cell_texts = []
+                        self._save_current_cell()
 
-                    # 다음 셀로 이동
-                    self.current_cell_col += 1
-                    if self.current_cell_col >= self.current_table.cols:
-                        self.current_cell_col = 0
-                        self.current_cell_row += 1
+                    # 셀 진입 상태로 변경
+                    self.in_cell = True
+                elif self.in_table and self.in_cell:
+                    # 이미 셀 안에 있으면 현재 셀 저장 후 다음 셀로
+                    if self.cell_texts:
+                        self._save_current_cell()
+                    self._advance_to_next_cell()
+                    self.in_cell = True
 
             i += 1
 
+        # Fix #2: 마지막 단락 처리
+        self._finalize_paragraph(section, 0)
+
         # 마지막 테이블 처리
         if self.in_table and self.current_table:
-            # 마지막 셀 저장
-            if self.cell_texts:
-                cell_text = "\n".join(self.cell_texts)
-                cell = TableCell(
-                    row=self.current_cell_row,
-                    col=self.current_cell_col,
-                    text=cell_text.strip(),
-                )
-                self.current_table.cells.append(cell)
-
-            section.tables.append(self.current_table)
-            self.in_table = False
-            self.current_table = None
+            self._finalize_current_table(section)
 
         return section
+
+    def _finalize_paragraph(self, section: Section, level: int) -> None:
+        """Fix #2: 누적된 단락 텍스트를 단락 또는 셀에 추가"""
+        if not self.current_para_texts:
+            return
+
+        full_text = "".join(self.current_para_texts)
+        self.current_para_texts = []
+
+        if not full_text.strip():
+            return
+
+        if self.in_table:
+            # 테이블 셀 내부 텍스트
+            self.cell_texts.append(full_text)
+        else:
+            # 일반 단락
+            para = Paragraph(text=full_text, level=level)
+            section.paragraphs.append(para)
+
+    def _finalize_current_table(self, section: Section) -> None:
+        """Fix #1: 현재 테이블을 마무리하고 섹션에 추가"""
+        if not self.current_table:
+            return
+
+        # 마지막 셀 저장
+        if self.cell_texts:
+            self._save_current_cell()
+
+        section.tables.append(self.current_table)
+        self.current_table = None
+        self.in_table = False
+        self.in_cell = False
+        self.table_start_level = None
+        self.cell_texts = []
+
+    def _save_current_cell(self) -> None:
+        """Fix #3: 현재 셀 텍스트를 테이블에 저장 (범위 검사 포함)"""
+        if not self.current_table or not self.cell_texts:
+            return
+
+        # Fix #3: 범위 검사
+        if not (0 <= self.current_cell_row < self.current_table.rows and
+                0 <= self.current_cell_col < self.current_table.cols):
+            # 범위 초과 시 경고 로그만 남기고 진행 (silent drop 대신)
+            self.cell_texts = []
+            return
+
+        cell_text = "\n".join(self.cell_texts)
+        cell = TableCell(
+            row=self.current_cell_row,
+            col=self.current_cell_col,
+            text=cell_text.strip(),
+        )
+        self.current_table.cells.append(cell)
+        self.cell_texts = []
+
+    def _advance_to_next_cell(self) -> None:
+        """다음 셀로 이동"""
+        if not self.current_table:
+            return
+
+        self.current_cell_col += 1
+        if self.current_cell_col >= self.current_table.cols:
+            self.current_cell_col = 0
+            self.current_cell_row += 1
 
     def _parse_para_header(self, data: bytes) -> int:
         """PARA_HEADER 파싱

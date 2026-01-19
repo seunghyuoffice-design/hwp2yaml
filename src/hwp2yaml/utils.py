@@ -4,6 +4,33 @@ import re
 import zipfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def _sort_section_files(files: list[str]) -> list[str]:
+    """
+    섹션 파일 숫자 기준 정렬 (Fix #4)
+
+    문제: sorted()는 "section10.xml"을 "section2.xml" 앞에 배치
+    해결: 파일명에서 숫자 추출하여 정수로 정렬
+
+    Args:
+        files: 섹션 파일 경로 리스트
+
+    Returns:
+        숫자 기준 정렬된 리스트
+    """
+    def extract_section_num(filepath: str) -> int:
+        """파일명에서 섹션 번호 추출"""
+        # "Contents/section0.xml" → 0, "section10.xml" → 10
+        match = re.search(r'section(\d+)\.xml', filepath, re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+        return 0  # 숫자 없으면 맨 앞으로
+
+    return sorted(files, key=extract_section_num)
 
 
 def convert_table_tags_to_markdown(text: str) -> str:
@@ -113,7 +140,7 @@ def extract_hwpx_text(filepath: str) -> str | None:
 
             # 2. Contents/section*.xml 파일에서 텍스트 추출
             texts = []
-            section_files = sorted([
+            section_files = _sort_section_files([
                 n for n in namelist
                 if "section" in n.lower() and n.endswith(".xml")
             ])
@@ -135,25 +162,68 @@ def extract_hwpx_text(filepath: str) -> str | None:
 
 
 def _parse_hwpx_section(xml_content: str) -> str:
-    """HWPX 섹션 XML 파싱"""
+    """HWPX 섹션 XML 파싱 (Fix #5: namespace-safe)"""
     try:
-        # 네임스페이스 제거 (단순화)
-        xml_content = re.sub(r'\sxmlns[^"]*"[^"]*"', "", xml_content)
-
+        # 방법 1: 네임스페이스 유지 파싱 시도
         root = ET.fromstring(xml_content)
-        texts = []
+        texts = _extract_text_preserving_whitespace(root)
+        if texts:
+            return "\n".join(texts)
 
-        # 모든 텍스트 요소 추출
-        for elem in root.iter():
-            if elem.text and elem.text.strip():
-                texts.append(elem.text.strip())
-            if elem.tail and elem.tail.strip():
-                texts.append(elem.tail.strip())
+    except ET.ParseError as e:
+        logger.debug(f"Namespace-aware parsing failed: {e}, trying fallback")
 
+    # 방법 2: 네임스페이스 제거 후 재시도 (fallback)
+    try:
+        xml_clean = _strip_namespaces_safe(xml_content)
+        root = ET.fromstring(xml_clean)
+        texts = _extract_text_preserving_whitespace(root)
         return "\n".join(texts)
 
-    except ET.ParseError:
+    except ET.ParseError as e:
+        logger.warning(f"HWPX section parsing failed: {e}")
         return ""
+
+
+def _extract_text_preserving_whitespace(element: ET.Element) -> list[str]:
+    """
+    XML 요소에서 텍스트 추출 (whitespace 의미 보존)
+
+    Fix #5: xml:space="preserve" 속성 존중
+    """
+    texts = []
+
+    # xml:space 속성 확인
+    space_preserve = element.get('{http://www.w3.org/XML/1998/namespace}space') == 'preserve'
+
+    if element.text:
+        text = element.text if space_preserve else element.text.strip()
+        if text:
+            texts.append(text)
+
+    for child in element:
+        child_texts = _extract_text_preserving_whitespace(child)
+        texts.extend(child_texts)
+
+    if element.tail:
+        tail = element.tail if space_preserve else element.tail.strip()
+        if tail:
+            texts.append(tail)
+
+    return texts
+
+
+def _strip_namespaces_safe(xml_content: str) -> str:
+    """
+    네임스페이스 안전하게 제거 (Fix #5 fallback)
+
+    주의: 이 방법은 의미를 잃을 수 있으므로 fallback으로만 사용
+    """
+    # xmlns 선언 제거
+    xml_clean = re.sub(r'\sxmlns[^=]*="[^"]*"', "", xml_content)
+    # 태그 접두사 제거 (예: <hp:p> → <p>)
+    xml_clean = re.sub(r'<(/?)(\w+):', r'<\1', xml_clean)
+    return xml_clean
 
 
 def is_hwpx(filepath: str) -> bool:
@@ -251,8 +321,8 @@ def extract_hwpx_structure(filepath: str) -> dict | None:
         with zipfile.ZipFile(filepath, "r") as zf:
             namelist = zf.namelist()
 
-            # section*.xml 파일 찾기
-            section_files = sorted([
+            # section*.xml 파일 찾기 (숫자 기준 정렬)
+            section_files = _sort_section_files([
                 n for n in namelist
                 if "section" in n.lower() and n.endswith(".xml")
             ])
@@ -282,7 +352,7 @@ def extract_hwpx_structure(filepath: str) -> dict | None:
 
 def _parse_hwpx_section_structure(xml_content: str, section_idx: int) -> dict | None:
     """
-    HWPX 섹션 XML에서 구조 추출
+    HWPX 섹션 XML에서 구조 추출 (Fix #5: namespace-safe)
 
     Args:
         xml_content: section*.xml 내용
@@ -291,18 +361,31 @@ def _parse_hwpx_section_structure(xml_content: str, section_idx: int) -> dict | 
     Returns:
         섹션 구조 딕셔너리
     """
-    try:
-        # 네임스페이스 제거 (단순화를 위해)
-        # xmlns 속성 제거 후 태그 접두사도 제거
-        xml_clean = re.sub(r'\sxmlns[^"]*"[^"]*"', "", xml_content)
-        xml_clean = re.sub(r'<(/?)(\w+):', r'<\1', xml_clean)
+    paragraphs = []
+    tables = []
 
+    # 방법 1: 네임스페이스 유지 파싱 시도
+    try:
+        root = ET.fromstring(xml_content)
+        _extract_structure_recursive(root, paragraphs, tables)
+
+        if paragraphs or tables:
+            return {
+                "index": section_idx,
+                "paragraphs": paragraphs,
+                "tables": tables,
+            }
+
+    except ET.ParseError as e:
+        logger.debug(f"Namespace-aware structure parsing failed: {e}, trying fallback")
+
+    # 방법 2: 네임스페이스 제거 후 재시도 (fallback)
+    try:
+        xml_clean = _strip_namespaces_safe(xml_content)
         root = ET.fromstring(xml_clean)
 
         paragraphs = []
         tables = []
-
-        # 재귀적으로 요소 탐색
         _extract_structure_recursive(root, paragraphs, tables)
 
         return {
@@ -311,8 +394,22 @@ def _parse_hwpx_section_structure(xml_content: str, section_idx: int) -> dict | 
             "tables": tables,
         }
 
-    except ET.ParseError:
+    except ET.ParseError as e:
+        logger.warning(f"HWPX section structure parsing failed: {e}")
         return None
+
+
+def _get_local_tag(element: ET.Element) -> str:
+    """
+    네임스페이스 제거한 로컬 태그명 추출 (Fix #5)
+
+    예: "{http://example.com}p" → "p"
+    """
+    tag = element.tag
+    if tag.startswith("{"):
+        # 네임스페이스 제거
+        return tag.split("}", 1)[1].lower()
+    return tag.lower()
 
 
 def _extract_structure_recursive(
@@ -322,7 +419,7 @@ def _extract_structure_recursive(
     current_level: int = 0
 ) -> None:
     """
-    XML 요소를 재귀적으로 탐색하여 단락과 테이블 추출
+    XML 요소를 재귀적으로 탐색하여 단락과 테이블 추출 (Fix #5: namespace-safe)
 
     HWPX 태그 구조:
     - <p> or <para>: 단락
@@ -332,7 +429,7 @@ def _extract_structure_recursive(
     - <tc>: 테이블 셀
     - <run>: 텍스트 런
     """
-    tag = element.tag.lower()
+    tag = _get_local_tag(element)
 
     # 테이블 처리
     if tag in ("tbl", "table"):
@@ -358,7 +455,7 @@ def _extract_structure_recursive(
 
 def _extract_paragraph_text(element: ET.Element) -> str:
     """
-    단락 요소에서 모든 텍스트 추출
+    단락 요소에서 모든 텍스트 추출 (Fix #5: namespace-safe)
 
     <p>
       <run><t>텍스트1</t></run>
@@ -373,7 +470,7 @@ def _extract_paragraph_text(element: ET.Element) -> str:
 
     # 모든 하위 요소 순회
     for elem in element.iter():
-        tag = elem.tag.lower()
+        tag = _get_local_tag(elem)
 
         # <t> 태그는 텍스트 컨테이너
         if tag == "t":
@@ -389,7 +486,7 @@ def _extract_paragraph_text(element: ET.Element) -> str:
 
 def _parse_hwpx_table(table_element: ET.Element) -> dict | None:
     """
-    테이블 요소에서 구조 추출
+    테이블 요소에서 구조 추출 (Fix #5: namespace-safe)
 
     <tbl>
       <tr><tc><p>...</p></tc><tc><p>...</p></tc></tr>
@@ -400,7 +497,7 @@ def _parse_hwpx_table(table_element: ET.Element) -> dict | None:
 
     # 행 찾기 (<tr>)
     for child in table_element:
-        tag = child.tag.lower()
+        tag = _get_local_tag(child)
         if tag == "tr":
             row_cells = _parse_hwpx_table_row(child)
             if row_cells:
@@ -424,7 +521,7 @@ def _parse_hwpx_table(table_element: ET.Element) -> dict | None:
 
 def _parse_hwpx_table_row(tr_element: ET.Element) -> list[str]:
     """
-    테이블 행에서 셀 텍스트 추출
+    테이블 행에서 셀 텍스트 추출 (Fix #5: namespace-safe)
 
     <tr>
       <tc><p><run><t>셀1</t></run></p></tc>
@@ -434,7 +531,7 @@ def _parse_hwpx_table_row(tr_element: ET.Element) -> list[str]:
     cells = []
 
     for child in tr_element:
-        tag = child.tag.lower()
+        tag = _get_local_tag(child)
         if tag == "tc":
             cell_text = _extract_cell_text(child)
             cells.append(cell_text.strip())
@@ -444,14 +541,14 @@ def _parse_hwpx_table_row(tr_element: ET.Element) -> list[str]:
 
 def _extract_cell_text(tc_element: ET.Element) -> str:
     """
-    테이블 셀에서 텍스트 추출
+    테이블 셀에서 텍스트 추출 (Fix #5: namespace-safe)
 
     셀 안에는 여러 단락이 있을 수 있음
     """
     texts = []
 
     for elem in tc_element.iter():
-        tag = elem.tag.lower()
+        tag = _get_local_tag(elem)
 
         if tag == "t":
             if elem.text:
