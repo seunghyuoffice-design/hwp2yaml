@@ -1,0 +1,217 @@
+{
+  "schema_version": 1,
+  "receipt_kind": "HWP_REUSE_RECONCILIATION",
+  "observed_date": "2026-08-31",
+  "lifecycle": "HOLD_DEPENDENCY_RECONCILE",
+  "authority_order": [
+    "AGENTS.md",
+    "ownership/reuse-reconciliation.v1.json",
+    "docs/OWNERSHIP.md",
+    "docs/VERIFICATION.md"
+  ],
+  "selected_reuse_target": "seunghyuoffice-design/hwp2yaml",
+  "new_duplicate_remote_allowed": false,
+  "reuse_cutover_approved": false,
+  "source_import_approved": false,
+  "source_deletion_allowed": false,
+  "source_move_allowed": false,
+  "source_archive_allowed": false,
+  "source_rename_allowed": false,
+  "working_tree_copy_allowed": false,
+  "role_worktrees_required": true,
+  "public_target": {
+    "repository": "seunghyuoffice-design/hwp2yaml",
+    "visibility": "PUBLIC",
+    "commit": "56231e2e4e26e3aff3dcff6ef82f5789aaa4a9d8",
+    "root_tree": "0663b1cdb86d2b73dae1c25433a0f9ddefd06c1d",
+    "source_tree": "609e7ef07890e4174d4f761e2efed8f26bc58481",
+    "tests_tree": "e339e865becd74829437a62ee1bb8e58f6be6a26",
+    "tracked_files": 21,
+    "implementation": "python",
+    "declared_package_version": "0.6.1",
+    "importable_version": "0.6.0",
+    "observed_cli_commands": [
+      "extract",
+      "batch",
+      "info"
+    ],
+    "release_authority": "CURRENT_BASELINE_ONLY"
+  },
+  "candidate_implementations": [
+    {
+      "repository": "seunghyuoffice-design/dyarchy-pipeline",
+      "commit": "b565aa04737389e21a4113a2ec2af0ca1fb68c76",
+      "root_tree": "97a14ee9c8df0648a31059c51a041807007654e7",
+      "component_prefix": "src/hwp2yaml-rs/",
+      "component_tree": "2011ab9bad0c97941622044b07c8501073c7b708",
+      "component_files": 33,
+      "implementation": "rust",
+      "declared_package_version": "0.1.0",
+      "observed_cli_commands": [
+        "convert",
+        "batch",
+        "info",
+        "text"
+      ],
+      "standalone_build_ready": false,
+      "public_import_allowed": false,
+      "license_status": "UNRESOLVED_THIRD_PARTY_PROVENANCE",
+      "privacy_status": "UNRESOLVED_FIXTURE_PROVENANCE"
+    },
+    {
+      "repository": "seunghyuoffice-design/Dyarchy-v6",
+      "commit": "52f80a13631e3054b76c4f9fd0df7a8c28161176",
+      "root_tree": "fbe3b6e50868d049ed0a5b19591c00bba4aca391",
+      "component_prefix": "archive/Dyarchy-v4/src/hwp2yaml-rs/",
+      "component_tree": "8e5733b817bd8085e8c8bf2f9fc539ae9163bf82",
+      "component_files": 32,
+      "authority": "LEGACY_EVIDENCE_ONLY",
+      "working_tree_read_allowed": false,
+      "public_import_allowed": false
+    }
+  ],
+  "pipeline_import_provenance": {
+    "source_repository": "seunghyuoffice-design/Dyarchy-v4",
+    "source_commit": "6d29588e274255a5e1f9752ac21cc5c5311baa05",
+    "source_prefix": "src/hwp2yaml-rs/",
+    "pipeline_scope_first_commit": "ebe6104f61170e1f29387ea2f6af14be25b665fc",
+    "original_and_target_paths_equal": true,
+    "copyright_and_license_chain_complete": false
+  },
+  "consumer_contracts": {
+    "pipeline_commit": "b565aa04737389e21a4113a2ec2af0ca1fb68c76",
+    "runtime_expected_invocation": "hwp2yaml parse --input <file> --output-format yaml",
+    "runtime_matches_public_python_cli": false,
+    "runtime_matches_pipeline_rust_main_cli": false,
+    "in_process_contract": "conversion-port::DocumentConverter",
+    "exact_path_blobs": {
+      "config/module-boundaries.toml": "12eda31c31952cd9b7ccdfb474697ef3dc6c612b",
+      "config/ingest_config.yaml": "536cd0c60631ca93286f3f512692c69459a7edaf",
+      "config/pipeline_runtime.yaml": "7458290b73d3acc95a64696b74f205fef8837b36",
+      "tools/rust-workers/crates/conversion-port/Cargo.toml": "33cfb12b67db84f0f5daad7b2ccd2bd15654a9b7",
+      "tools/rust-workers/crates/conversion-port/src/lib.rs": "4ff264145cb6fb6d4e217d96864f9b39e380989c",
+      "tools/rust-workers/crates/pipeline-core/Cargo.toml": "17905bc4cf9eafe2bbf9ec7ec4460d8149af0e83",
+      "tools/rust-workers/crates/pipeline-core/src/parsers/unified_parser.rs": "68d8fd057b2f0cb5d49b6728b0b5ba2fa73db08f",
+      "tools/pipeline-rs/crates/pipeline-runtime/src/hwp_stage.rs": "0278d8a9f8f52a025d6f9421ec82a4590e6a3957"
+    }
+  },
+  "sealed_public_import_blockers": [
+    "UNRESOLVED_THIRD_PARTY_COPYRIGHT_LICENSE_NOTICE_AND_GENERATION_CHAIN",
+    "UNRESOLVED_OR_UNAPPROVED_DOCUMENT_FIXTURE_PROVENANCE",
+    "PIPELINE_RELATIVE_CONVERSION_PORT_DEPENDENCY",
+    "CLI_AND_SCHEMA_AUTHORITY_CONFLICT",
+    "PARSER_RESOURCE_LIMITS_AND_CANCELLATION_GAPS",
+    "EXTERNAL_PROCESS_MODEL_AND_NO_EGRESS_BOUNDARY_UNRESOLVED",
+    "DEPENDENCY_ADVISORY_AND_SBOM_REVIEW_REQUIRED",
+    "DETERMINISTIC_OUTPUT_AND_PATH_PRIVACY_UNPROVED"
+  ],
+  "excluded_candidate_paths": [
+    "src/hwp2yaml-rs/test_files/1999-046.yaml"
+  ],
+  "excluded_domains": [
+    "document_normalizer",
+    "docx",
+    "pdf_xml",
+    "layout",
+    "dashboard",
+    "quality",
+    "pipeline_runtime_except_pinned_consumer_evidence",
+    "redis_queue_watchdog_power_ssh_docker_deploy"
+  ],
+  "fixture_policy": {
+    "synthetic_only_by_default": true,
+    "generator_and_hash_required": true,
+    "raw_private_documents_allowed": false,
+    "absolute_or_file_uri_source_paths_allowed": false
+  },
+  "role_branches": {
+    "governance/hwp-reuse-reconciliation": "GOVERNANCE_OWNERSHIP_AND_LIFECYCLE_ONLY",
+    "verify/hwp-reuse-contract": "VERIFIER_SYNTHETIC_FIXTURE_WORKFLOW_AND_EVIDENCE_ONLY",
+    "feature/hwp-contract-alignment": "APPROVED_PRODUCT_SOURCE_ONLY",
+    "migration/rust-implementation-import": "APPROVED_IMMUTABLE_SOURCE_HISTORY_ONLY"
+  },
+  "supported_hosted_matrix": {
+    "operating_systems": [
+      "ubuntu-latest",
+      "windows-latest"
+    ],
+    "python_versions": [
+      "3.10",
+      "3.12"
+    ],
+    "rust_artifact_supported": false
+  },
+  "machine_validation": {
+    "required": true,
+    "verifier_path": "qa/verify_repository.py",
+    "negative_test_glob": "qa/test_*.py",
+    "state": "PENDING_VERIFY_ROLE_BRANCH"
+  },
+  "hosted_ci": {
+    "required": true,
+    "required_jobs_must_be_created": true,
+    "integration_head": null,
+    "run_ids": [],
+    "state": "UNVERIFIED_NO_WORKFLOW_AT_PUBLIC_BASELINE"
+  },
+  "approvals": {
+    "governance": false,
+    "verification": false,
+    "security": false,
+    "release": false,
+    "evidence": []
+  },
+  "premerge_integration_fresh_clone": {
+    "required": true,
+    "hosted_ci_head_must_match": true,
+    "integration_head": null,
+    "requested_checkout_commit": null,
+    "observed_checkout_commit": null,
+    "evidence": null,
+    "state": "UNVERIFIED"
+  },
+  "postmerge_final_main_fresh_clone": {
+    "required_before_reconciled_release_or_cutover": true,
+    "main_commit": null,
+    "observed_checkout_commit": null,
+    "evidence": null,
+    "state": "UNVERIFIED"
+  },
+  "repository_security_setting": {
+    "private_vulnerability_reporting": "ENABLED_VERIFIED_2026-08-31"
+  },
+  "local_baseline_smoke": {
+    "evidence_level": "LOCAL_ONLY_NOT_HOSTED_NOT_RELEASE",
+    "source_commit": "56231e2e4e26e3aff3dcff6ef82f5789aaa4a9d8",
+    "os": "Microsoft Windows NT 10.0.26200.0",
+    "python": "3.13.14",
+    "pytest": "9.1.1",
+    "ruff": "0.16.5",
+    "dependency_resolution": "UNLOCKED_ISOLATED_VENV",
+    "pytest_command": "python -m pytest -q -p no:cacheprovider tests",
+    "pytest_exit_code": 0,
+    "pytest_tests_passed": 26,
+    "pytest_stdout_sha256": "98ef694ed297eb638cae8cba66868413177294a3de09591e0e39d0e2f43bc600",
+    "pip_check_command": "python -m pip check",
+    "pip_check_exit_code": 0,
+    "pip_check_stdout_sha256": "672aec65a45bed50e70229c70934a7eebf0462595c459b83023027645d57cccf",
+    "ruff_command": "ruff check --output-format json src tests",
+    "ruff_exit_code": 1,
+    "ruff_findings": 44,
+    "ruff_fixable_findings": 41,
+    "ruff_json_sha256": "e4ffdc8e28b54ca64f6dddd49439c192cef5c95180cfaefd99115c0c0149212a"
+  },
+  "required_role_sequence": [
+    "governance",
+    "verify",
+    "parent_integrated_exact_head",
+    "hosted_ci_jobs_created_and_passed",
+    "premerge_integration_fresh_clone",
+    "governance_verification_security_review",
+    "main_merge_if_approved",
+    "postmerge_final_main_fresh_clone",
+    "architecture_decision",
+    "feature_or_migration_if_approved",
+    "repeat_integration_and_final_main_gates"
+  ]
+}

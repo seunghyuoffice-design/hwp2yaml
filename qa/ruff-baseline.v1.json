@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "tool": "ruff",
+  "tool_version": "0.16.5",
+  "target_paths": [
+    "src",
+    "tests",
+    "qa"
+  ],
+  "raw_ruff_exit_code": 1,
+  "findings": 44,
+  "fixable_findings": 41,
+  "normalized_findings_sha256": "bd5894e614ccfb4f507f8be91481351c11dfae49ed15a6ad0ed47fff224911ac"
+}
